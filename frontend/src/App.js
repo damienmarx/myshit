@@ -4,6 +4,50 @@ import "@/App.css";
 const repoData = {
   repositories: [
     {
+      name: "Kodakclout (DegensDen)",
+      fullName: "damienmarx/Kodakclout",
+      url: "https://github.com/damienmarx/Kodakclout",
+      description: "7DEGEN7DEN7 - Luxury Gaming Platform with 7 provably fair games, glassmorphism UI, and OSRS integration",
+      language: "TypeScript",
+      size: "8.1MB",
+      stars: 0,
+      forks: 0,
+      created: "2026-03-17",
+      updated: "2026-03-20",
+      license: "MIT",
+      potential: 98,
+      monetization: 99,
+      complexity: 95,
+      scalability: 94,
+      features: [
+        "7 Provably Fair Games (Flower Poker, Hot & Cold, Roulette, Keno, Plinko, Dice, Crash)",
+        "Cryptographic Verification (HMAC-SHA256)",
+        "Rain Events System",
+        "Live Chat (Lobby & Game Channels)",
+        "5-Type Leaderboards",
+        "OSRS Gold Integration",
+        "Discord Bot Notifications",
+        "Luxury Glassmorphism UI",
+        "Wallet System + Transaction History",
+        "Health Checks + Auto-Rollback"
+      ],
+      techStack: ["React", "TypeScript", "Tailwind CSS", "Vite", "Node.js", "tRPC", "Drizzle ORM", "MySQL", "PM2", "Cloudflared"],
+      category: "gambling",
+      revenueModel: "House Edge (1-4% per game) + Rain Commissions",
+      monthlyPotential: "$100,000 - $2,000,000+",
+      riskLevel: "High (Legal/Regulatory)",
+      uniqueFeatures: [
+        "Most complete casino platform in portfolio",
+        "Production-ready with PM2 + tunnel deployment",
+        "7 different game types with 96-99% RTP",
+        "Sophisticated 10+ table MySQL schema",
+        "cloutscape.org domain ready",
+        "C2 Dashboard for operations"
+      ],
+      isPrivate: true,
+      highlight: true
+    },
+    {
       name: "CloutScape",
       fullName: "damienmarx/CloutScape",
       url: "https://github.com/damienmarx/CloutScape",
@@ -285,11 +329,11 @@ const repoData = {
     }
   ],
   summary: {
-    totalRepos: 8,
-    totalSize: "65.5MB",
-    topLanguages: ["JavaScript", "TypeScript", "Python", "Java", "Kotlin"],
-    avgPotential: 75.25,
-    totalMonthlyPotential: "$166,500 - $1,665,000+",
+    totalRepos: 9,
+    totalSize: "73.6MB",
+    topLanguages: ["TypeScript", "JavaScript", "Python", "Java", "Kotlin"],
+    avgPotential: 80.0,
+    totalMonthlyPotential: "$266,500 - $3,665,000+",
     primaryFocus: "Gambling & Gaming Ecosystem"
   }
 };
@@ -364,12 +408,26 @@ const RepoCard = ({ repo, index, isExpanded, onToggle }) => {
         'from-slate-500/20 to-zinc-500/20'
       } rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
       
-      <div className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/50 transition-all duration-300">
+      <div className={`relative bg-slate-900/80 backdrop-blur-xl border ${repo.highlight ? 'border-amber-500/50 ring-2 ring-amber-500/20' : 'border-slate-700/50'} rounded-2xl p-6 hover:border-slate-600/50 transition-all duration-300`}>
+        {/* Crown Badge for highlight */}
+        {repo.highlight && (
+          <div className="absolute -top-3 -right-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+            👑 FLAGSHIP
+          </div>
+        )}
+        
+        {/* Private Badge */}
+        {repo.isPrivate && (
+          <div className="absolute -top-3 left-4 bg-slate-700 text-slate-300 text-xs font-medium px-2 py-0.5 rounded-full">
+            🔒 Private
+          </div>
+        )}
+        
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <span className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+              <span className={`text-2xl font-bold bg-gradient-to-r ${repo.highlight ? 'from-amber-400 to-orange-400' : 'from-white to-slate-300'} bg-clip-text text-transparent`}>
                 #{index + 1}
               </span>
               <h3 className="text-xl font-bold text-white">{repo.name}</h3>
@@ -536,23 +594,28 @@ const InsightsSection = () => (
     </h2>
 
     <div className="space-y-4">
+      <div className="bg-slate-900/50 rounded-xl p-4 border border-amber-500/30">
+        <h3 className="font-semibold text-amber-400 mb-2">🏆 CROWN JEWEL: Kodakclout (DegensDen)</h3>
+        <p className="text-sm text-slate-300">Your most complete platform with 7 provably fair games, production-ready deployment, and $100K-$2M+/month ceiling. This is the flagship product - prioritize launch.</p>
+      </div>
+
       <div className="bg-slate-900/50 rounded-xl p-4">
-        <h3 className="font-semibold text-emerald-400 mb-2">🎯 Highest Potential: BGaming-</h3>
-        <p className="text-sm text-slate-300">The casino infrastructure tool has the highest revenue ceiling at $100K-$1M+/month. Consider compliance consulting before scaling.</p>
+        <h3 className="font-semibold text-emerald-400 mb-2">🎯 Second Highest: BGaming-</h3>
+        <p className="text-sm text-slate-300">Casino infrastructure with $100K-$1M+/month potential. Pairs perfectly with Kodakclout for a complete casino-as-a-service offering.</p>
       </div>
 
       <div className="bg-slate-900/50 rounded-xl p-4">
         <h3 className="font-semibold text-blue-400 mb-2">🔗 Ecosystem Synergy</h3>
-        <p className="text-sm text-slate-300">CloutScape + KodakGP + Codez form a powerful affiliate ecosystem. Cross-platform SSO and unified wallets would multiply value.</p>
+        <p className="text-sm text-slate-300">Kodakclout + CloutScape + KodakGP + Codez form a powerful vertical: Games → Gold Marketplace → Affiliate Tools. Unified SSO would create a locked-in ecosystem.</p>
       </div>
 
       <div className="bg-slate-900/50 rounded-xl p-4">
         <h3 className="font-semibold text-purple-400 mb-2">📈 Growth Opportunities</h3>
         <ul className="text-sm text-slate-300 space-y-1 mt-2">
-          <li>• Implement CloutScape x KodakGP unified account system</li>
+          <li>• Launch Kodakclout on cloutscape.org domain</li>
+          <li>• Integrate KodakGP gold trading with Kodakclout wallet</li>
           <li>• Add Stripe/Crypto payments to Codez for premium tiers</li>
-          <li>• Build mobile apps for CloutScape gambling suite</li>
-          <li>• Expand Precision into paid course platform</li>
+          <li>• Build mobile PWA for Kodakclout gaming suite</li>
         </ul>
       </div>
 
@@ -580,12 +643,12 @@ const RecommendationsSection = () => (
 
     <div className="space-y-3">
       {[
+        { priority: "P0", label: "Critical", color: "red", item: "Launch Kodakclout (DegensDen) on cloutscape.org - your flagship $2M+/mo product" },
         { priority: "P0", label: "Critical", color: "red", item: "Deploy BGaming- infrastructure with proper licensing consultation" },
-        { priority: "P0", label: "Critical", color: "red", item: "Complete CloutScape ↔ KodakGP SSO integration" },
-        { priority: "P1", label: "High", color: "orange", item: "Add payment processing to Codez (Stripe + Crypto)" },
-        { priority: "P1", label: "High", color: "orange", item: "Implement provably fair verification UI for CloutScape" },
-        { priority: "P2", label: "Medium", color: "yellow", item: "Build mobile-responsive PWA for CloutScape" },
-        { priority: "P2", label: "Medium", color: "yellow", item: "Add AI-powered affiliate link recommendations to Codez" },
+        { priority: "P1", label: "High", color: "orange", item: "Integrate Kodakclout wallet with KodakGP gold marketplace" },
+        { priority: "P1", label: "High", color: "orange", item: "Complete CloutScape ↔ Kodakclout SSO integration" },
+        { priority: "P2", label: "Medium", color: "yellow", item: "Add payment processing to Codez (Stripe + Crypto)" },
+        { priority: "P2", label: "Medium", color: "yellow", item: "Build mobile-responsive PWA for Kodakclout" },
         { priority: "P3", label: "Low", color: "blue", item: "Expand Precision into video course platform" },
         { priority: "P3", label: "Low", color: "blue", item: "Open-source non-critical CloutScape components" }
       ].map((item, i) => (

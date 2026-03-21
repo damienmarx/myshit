@@ -1,0 +1,22 @@
+Discord guild token=1470171583346638852
+Discord admin id=
+Owner id =1469870359187558421
+
+Application ID
+1470192416626577440
+Copy
+Public Key
+338ca01e4da22f74d1b84df8c0256a435f8c4bd59cec02be3d1f
+e5aa5d4cd397
+Copy
+######
+######
+
+Redirect uri:https://cloutscape.ora/api/oauth/discord/callback
+
+https://discord.com/oauth2/authorize?client_id=1470192416626577440&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Fcloutscape.org%2Fapi%2Foauth%2Fdiscord%2Fcallback&integration_type=0&scope=application_identities.write+lobbies.write+sdk.social_layer_presence+sdk.social_layer+account.global_name.update+payment_sources.country_code+gateway.connect+dm_channels.messages.write+dm_channels.messages.read+openid+presences.write+role_connections.write+dm_channels.read+presences.read+voice+relationships.read+relationships.write+activities.invites.write+activities.write+activities.read+applications.entitlements+applications.store.update+applications.commands+applications.builds.read+applications.builds.upload+rpc.activities.write+webhook.incoming+messages.read+rpc.screenshare.read+rpc.screenshare.write+rpc.video.write+rpc.video.read+rpc.voice.write+rpc.voice.read+rpc.notifications.read+rpc+bot+gdm.join+guilds.members.read+guilds.channels.read+guilds.join+guilds+email+connections+identify.premium+identify+applications.commands.permissions.update
+#######    ########  #######
+
+Discord bot token=
+Discord client id=
+Discord client key =

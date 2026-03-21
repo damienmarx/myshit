@@ -1,0 +1,1 @@
+![[Nightfury 1 1]]![[Nightfury 1]]
